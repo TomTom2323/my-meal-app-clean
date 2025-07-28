@@ -146,7 +146,7 @@ export default function App() {
     const text = await res.text();
     console.log("GASレスポンス:", res.status, text);
 
-    Alert.alert("送信完了", "全データをスプレッドシートに送信しました");
+    Alert.alert("送信完了", "全データをスプレッドシートに送信しました.");
     setMeals([]);  // 一覧をクリアする
 
   } catch (error) {
