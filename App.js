@@ -19,13 +19,35 @@ import {
 } from "firebase/firestore";
 import Constants from "expo-constants";
 
+// ★Function部分★ //
 export default function App() {
   const [meal, setMeal] = useState("");
   const [meals, setMeals] = useState([]);
   const [isSending, setIsSending] = useState(false); // 追加
   const apiKey = Constants.expoConfig.extra.OPENAI_API_KEY;
 
-  // ✅ ChatGPTへ送信し、返答を得る関数
+  // ✅ meal追加（ChatGPT連携 → Firebase保存）
+  const addMeal = async () => {
+    if (meal.trim() === "") {
+      Alert.alert("入力エラー", "食事内容を入力してください");
+      return;
+    }
+
+    try {
+      const gptResponse = await sendToChatGPT(meal);
+      await addDoc(collection(db, "meals"), {
+        input: meal,
+        gptResponse,
+        timestamp: serverTimestamp(),
+      });
+      setMeal("");
+    } catch (error) {
+      console.error("追加エラー:", error);
+      Alert.alert("追加エラー", "データの追加に失敗しました");
+    }
+  };
+
+  // ✅ addmeal()の子関数、ChatGPTへプロンプトを投げて結果を受領する関数
   const sendToChatGPT = async (input) => {
     input = "右記の食物に対してカンマ区切りで「カロリー」「タンパク質」「脂質」「炭水化物」「糖質」「食物繊維」を表示してください。「食物」の情報は付与しないでください。単位は付けないでください。ヘッダーは付けないでください" + input
 
@@ -52,27 +74,7 @@ export default function App() {
     }
   };
 
-  // ✅ meal追加（ChatGPT連携 → Firebase保存）
-  const addMeal = async () => {
-    if (meal.trim() === "") {
-      Alert.alert("入力エラー", "食事内容を入力してください");
-      return;
-    }
-
-    try {
-      const gptResponse = await sendToChatGPT(meal);
-      await addDoc(collection(db, "meals"), {
-        input: meal,
-        gptResponse,
-        timestamp: serverTimestamp(),
-      });
-      setMeal("");
-    } catch (error) {
-      console.error("追加エラー:", error);
-      Alert.alert("追加エラー", "データの追加に失敗しました");
-    }
-  };
-
+  // ✅ mealの削除（Firebase上からも削除）
   const deleteMeal = async (id) => {
     try {
       await deleteDoc(doc(db, "meals", id));
@@ -82,6 +84,7 @@ export default function App() {
     }
   };
 
+  // ✅ Firestoreの"meals"コレクションをリアルタイムで監視してstateに反映する
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(db, "meals"),
@@ -105,22 +108,21 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-    // 一覧からgoogleスプレッドシートへ送信。その後削除
-    const handlePress = async () => {
+  // ✅ 一覧からgoogleスプレッドシートへ送信。その後削除
+  const handlePress = async () => {
 
-      if (meals.length === 0) {
-        Alert.alert("送信エラー", "送信するデータがありません");
-       return;
-      }
+    if (meals.length === 0) {
+      Alert.alert("送信エラー", "送信するデータがありません");
+      return;
+    }
 
-      setIsSending(true); // 送信開始
+    setIsSending(true); // 送信開始
 
-      const payload = {
-        input: meal.input,
-        gptResponse: meal.gptResponse,
-        timestamp: meal.timestamp,
-      };
-
+    const payload = {
+      input: meal.input,
+      gptResponse: meal.gptResponse,
+      timestamp: meal.timestamp,
+    };
 
   try {
     for (const mealItem of meals) {
@@ -138,26 +140,23 @@ export default function App() {
         body: JSON.stringify(payload),
       });
 
-      // Firebaseから削除 // 🔄 追加
-      await deleteDoc(doc(db, "meals", mealItem.id));
+    // Firebaseから削除 // 🔄 追加
+    await deleteDoc(doc(db, "meals", mealItem.id));
 
-    }
-
-    const text = await res.text();
-    console.log("GASレスポンス:", res.status, text);
-
-    Alert.alert("送信完了", "全データをスプレッドシートに送信しました.");
-    setMeals([]);  // 一覧をクリアする
-
-  } catch (error) {
-    Alert.alert("送信エラー", error.message);
-  }　finally {
-      setIsSending(false); // 送信終了
   }
+
+  Alert.alert("送信完了", "全データをスプレッドシートに送信しました.");
+  setMeals([]);  // 一覧をクリアする
+
+} catch (error) {
+  Alert.alert("送信エラー", error.message);
+}　finally {
+    setIsSending(false); // 送信終了
+}
   };
 
 
-
+// ★表示部分（HTML)★ //
   const renderHeader = () => (
     <View style={[styles.row, styles.headerRow]}>
       <Text style={[styles.cell, styles.headerCell, { flex: 2 }]}>食事</Text>
@@ -211,6 +210,7 @@ export default function App() {
   );
 }
 
+// ★表示部分（CSS)★ //
 const styles = StyleSheet.create({
   container: {
     flex: 1,
